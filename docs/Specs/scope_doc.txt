@@ -1,0 +1,11 @@
+The kernel will consist of the following parts:
+
+	- Bootloader (as small as possible)
+	- Startup routines, including hardware detection and initialization of various parts of the kernel
+	- interrupt manager
+	- memory manager
+	- filesystem with specified function names to allow for usign other filesystems than the one provided
+	- multitask manager
+	- install wizard
+	- STDIO, including keyboard, LEM and SPED support
+	- basic drivers, including clock (maybe separated from the kernel in a prgoram)

@@ -1,0 +1,260 @@
+; --------------------------------------------
+; Title: rnglib
+; Author: awesome271828
+; See README in docs.
+; --------------------------------------------
+
+; Produces 16 random bytes. Suitable for use as an IV with LibCrypto.
+; Set the A register to the location where the bytes should be written, call
+; JSR lib_rng_wrapper, and it will take care of the rest.
+
+:lib_rng ; MD2 optimized for 2 word messages.
+
+:lib_rng_wrapper
+    SET PUSH, I
+    SET PUSH, J
+    SET PUSH, X
+    SET PUSH, Y
+    SET PUSH, Z
+:lib_rng_RELOC1 JSR lib_rng_generate
+    SET Z, POP
+    SET Y, POP
+    SET X, POP
+    SET J, POP
+    SET I, POP
+    SET PC, POP
+
+; -----------------------------------------------------------------------------
+
+:lib_rng_init
+:lib_rng_RELOC2 SET I, lib_rng_padding
+    :lib_rng_initloop
+        STI [I], 12
+:lib_rng_RELOC3 IFN I, lib_rng_checksum
+:lib_rng_RELOC4     SET PC, lib_rng_initloop
+    :lib_rng_initloop2
+        STI [I], 0
+:lib_rng_RELOC5 IFN I, lib_rng_s_table
+:lib_rng_RELOC6     SET PC, lib_rng_initloop2
+:lib_rng_RELOC7 SET [lib_rng_firstrun_flag], 1 ; RELOC7+2
+    SET PC, POP
+
+:lib_rng_generate_checksum
+:lib_rng_RELOC8 SET [lib_rng_firstrun_flag], 0 ; Same as RELOC7.
+    SET I, 0 ; I := L
+    SET J, 0 ; Checksum inner loop counter.
+    :lib_rng_checksumloop
+:lib_rng_RELOC9 SET X, lib_rng_checksum
+        ADD X, J ; [X] := C[j]
+:lib_rng_RELOC10 SET Y, lib_rng_seed_firstbyte
+        ADD Y, J ; [Y] := M[i*16 + j] where i = 0.
+:lib_rng_RELOC11 SET Z, lib_rng_s_table
+        SET C, [Y]
+        XOR C, I ; C := c xor L
+        ADD Z, C ; [Z] := S[c xor L]
+        SET [X], [Z]
+        SET I, [X]
+        ADD J, 1
+        IFN J, 16
+:lib_rng_RELOC12 SET PC, lib_rng_checksumloop
+    SET PC, POP
+
+:lib_rng_generate ; A is location where random number should be written to.
+    SET PUSH, A
+    JSR [0x06] ; cd_get_sys_time
+:lib_rng_RELOC13 SET [lib_rng_seed_firstbyte], B
+:lib_rng_RELOC14 SHR [lib_rng_seed_firstbyte], 8
+:lib_rng_RELOC15 SET [lib_rng_seed_secondbyte], B
+:lib_rng_RELOC16 AND [lib_rng_seed_secondbyte], 0xff
+:lib_rng_RELOC17 SET [lib_rng_seed_thirdbyte], A
+:lib_rng_RELOC18 SHR [lib_rng_seed_thirdbyte], 8
+:lib_rng_RELOC19 SET [lib_rng_seed_fourthbyte], A
+:lib_rng_RELOC20 AND [lib_rng_seed_fourthbyte], 0xff
+:lib_rng_RELOC21 IFN [lib_rng_firstrun_flag], 1
+:lib_rng_RELOC22     JSR lib_rng_init
+:lib_rng_RELOC23 JSR lib_rng_generate_checksum
+    SET J, 0
+    :lib_rng_generateloop1 ; First iteration, i = 0
+:lib_rng_RELOC24 SET X, lib_rng_buffer
+        ADD X, J
+        SET C, [X] ; C := X[j], will use this value later.
+        ADD X, 16 ; [X] := X[16 + j]
+:lib_rng_RELOC25 SET Y, lib_rng_seed_firstbyte
+        ADD Y, J ; [Y] := M[i*16 + j] where i = 0.
+        SET [X], [Y]
+        SET Z, [X] ; Z := X[16 + j], will use this value later too.
+        ADD X, 16 ; [X] := X[32 + j]
+        XOR Z, C
+        SET [X], Z
+        ADD J, 1
+        IFN J, 16
+:lib_rng_RELOC26 SET PC, lib_rng_generateloop1
+    SET J, 0
+    SET A, 0 ; A := t
+    :lib_rng_generateloop15
+        SET Z, 0 ; Z := k
+        :lib_rng_generateloop15_inner
+:lib_rng_RELOC27 SET X, lib_rng_buffer
+            ADD X, Z
+:lib_rng_RELOC28 SET I, lib_rng_s_table
+            ADD I, A
+            XOR [X], [I]
+            SET A, [X]
+            ADD Z, 1
+            IFN Z, 0x30
+:lib_rng_RELOC29 SET PC, lib_rng_generateloop15_inner
+            ADD A, J
+            AND A, 0xff ; Fewer cycles than MOD A, 256
+            ADD J, 1
+            IFN J, 18
+:lib_rng_RELOC30 SET PC, lib_rng_generateloop15
+    SET J, 0
+    :lib_rng_generateloop2 ; Second iteration of unrolled loop. i = 1.
+:lib_rng_RELOC31 SET X, lib_rng_buffer
+        ADD X, J
+        SET C, [X]
+        ADD X, 16
+:lib_rng_RELOC32 SET Y, lib_rng_seed_firstbyte
+        ADD Y, 16
+        ADD Y, J ; [Y] := M[i*16 + j] where i = 1.
+        SET [X], [Y]
+        SET Z, [X]
+        ADD X, 16
+        XOR Z, C
+        SET [X], Z
+        ADD J, 1
+        IFN J, 16
+:lib_rng_RELOC33 SET PC, lib_rng_generateloop2
+    SET J, 0
+    SET A, 0 ; A := t
+    :lib_rng_generateloop25
+        SET Z, 0 ; Z := k
+        :lib_rng_generateloop25_inner
+:lib_rng_RELOC34 SET X, lib_rng_buffer
+            ADD X, Z
+:lib_rng_RELOC35 SET I, lib_rng_s_table
+            ADD I, A
+            XOR [X], [I]
+            SET A, [X]
+            ADD Z, 1
+            IFN Z, 0x30
+:lib_rng_RELOC36 SET PC, lib_rng_generateloop25_inner
+            ADD A, J
+            AND A, 0xff ; Fewer cycles than MOD A, 256
+            ADD J, 1
+            IFN J, 18
+:lib_rng_RELOC37 SET PC, lib_rng_generateloop25
+    SET I, 0
+    SET A, POP
+    :lib_rng_generate_writeloop
+:lib_rng_RELOC38 SET X, lib_rng_buffer
+        ADD X, I
+        SET C, A
+        ADD C, I
+        STI [C], [X]
+        IFN I, 16
+:lib_rng_RELOC39 SET PC, lib_rng_generate_writeloop
+    SET PC, POP
+
+:lib_rng_firstrun_flag
+DAT 0x01
+
+:lib_rng_seed_firstbyte
+DAT 0x00
+
+:lib_rng_seed_secondbyte
+DAT 0x00
+
+:lib_rng_seed_thirdbyte
+DAT 0x00
+
+:lib_rng_seed_fourthbyte
+DAT 0x00
+
+:lib_rng_padding
+DAT 0x0C, 0x0C, 0x0C, 0x0C
+DAT 0x0C, 0x0C, 0x0C, 0x0C
+DAT 0x0C, 0x0C, 0x0C, 0x0C
+
+:lib_rng_checksum
+DAT 0x00, 0x00, 0x00, 0x00
+DAT 0x00, 0x00, 0x00, 0x00
+DAT 0x00, 0x00, 0x00, 0x00
+DAT 0x00, 0x00, 0x00, 0x00
+
+:lib_rng_buffer
+DAT 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+DAT 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+DAT 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+DAT 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+DAT 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+DAT 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+
+:lib_rng_s_table
+DAT 0x29, 0x2E, 0x43, 0xC9, 0xA2, 0xD8, 0x7C, 0x01, 0x3D, 0x36, 0x54, 0xA1, 0xEC, 0xF0, 0x06, 0x13
+DAT 0x62, 0xA7, 0x05, 0xF3, 0xC0, 0xC7, 0x73, 0x8C, 0x98, 0x93, 0x2B, 0xD9, 0xBC, 0x4C, 0x82, 0xCA
+DAT 0x1E, 0x9B, 0x57, 0x3C, 0xFD, 0xD4, 0xE0, 0x16, 0x67, 0x42, 0x6F, 0x18, 0x8A, 0x17, 0xE5, 0x12
+DAT 0xBE, 0x4E, 0xC4, 0xD6, 0xDA, 0x9E, 0xDE, 0x49, 0xA0, 0xFB, 0xF5, 0x8E, 0xBB, 0x2F, 0xEE, 0x7A
+DAT 0xA9, 0x68, 0x79, 0x91, 0x15, 0xB2, 0x07, 0x3F, 0x94, 0xC2, 0x10, 0x89, 0x0B, 0x22, 0x5F, 0x21
+DAT 0x80, 0x7F, 0x5D, 0x9A, 0x5A, 0x90, 0x32, 0x27, 0x35, 0x3E, 0xCC, 0xE7, 0xBF, 0xF7, 0x97, 0x03
+DAT 0xFF, 0x19, 0x30, 0xB3, 0x48, 0xA5, 0xB5, 0xD1, 0xD7, 0x5E, 0x92, 0x2A, 0xAC, 0x56, 0xAA, 0xC6
+DAT 0x4F, 0xB8, 0x38, 0xD2, 0x96, 0xA4, 0x7D, 0xB6, 0x76, 0xFC, 0x6B, 0xE2, 0x9C, 0x74, 0x04, 0xF1
+DAT 0x45, 0x9D, 0x70, 0x59, 0x64, 0x71, 0x87, 0x20, 0x86, 0x5B, 0xCF, 0x65, 0xE6, 0x2D, 0xA8, 0x02
+DAT 0x1B, 0x60, 0x25, 0xAD, 0xAE, 0xB0, 0xB9, 0xF6, 0x1C, 0x46, 0x61, 0x69, 0x34, 0x40, 0x7E, 0x0F
+DAT 0x55, 0x47, 0xA3, 0x23, 0xDD, 0x51, 0xAF, 0x3A, 0xC3, 0x5C, 0xF9, 0xCE, 0xBA, 0xC5, 0xEA, 0x26
+DAT 0x2C, 0x53, 0x0D, 0x6E, 0x85, 0x28, 0x84, 0x09, 0xD3, 0xDF, 0xCD, 0xF4, 0x41, 0x81, 0x4D, 0x52
+DAT 0x6A, 0xDC, 0x37, 0xC8, 0x6C, 0xC1, 0xAB, 0xFA, 0x24, 0xE1, 0x7B, 0x08, 0x0C, 0xBD, 0xB1, 0x4A
+DAT 0x78, 0x88, 0x95, 0x8B, 0xE3, 0x63, 0xE8, 0x6D, 0xE9, 0xCB, 0xD5, 0xFE, 0x3B, 0x00, 0x1D, 0x39
+DAT 0xF2, 0xEF, 0xB7, 0x0E, 0x66, 0x58, 0xD0, 0xE4, 0xA6, 0x77, 0x72, 0xF8, 0xEB, 0x75, 0x4B, 0x0A
+DAT 0x31, 0x44, 0x50, 0xB4, 0x8F, 0xED, 0x1F, 0x1A, 0xDB, 0x99, 0x8D, 0x33, 0x9F, 0x11, 0x83, 0x14
+:lib_rng_end
+
+; Begin Library Header.
+DAT lib_rng_wrapper
+; Begin Relocation Table.
+DAT lib_rng_RELOC1+1
+DAT lib_rng_RELOC2+1
+DAT lib_rng_RELOC3+1
+DAT lib_rng_RELOC4+1
+DAT lib_rng_RELOC5+1
+DAT lib_rng_RELOC6+1
+DAT lib_rng_RELOC7+2
+DAT lib_rng_RELOC8+1
+DAT lib_rng_RELOC9+1
+DAT lib_rng_RELOC10+1
+DAT lib_rng_RELOC11+1
+DAT lib_rng_RELOC12+1
+DAT lib_rng_RELOC13+2
+DAT lib_rng_RELOC14+2
+DAT lib_rng_RELOC15+2
+DAT lib_rng_RELOC16+2
+DAT lib_rng_RELOC17+2
+DAT lib_rng_RELOC18+2
+DAT lib_rng_RELOC19+2
+DAT lib_rng_RELOC20+2
+DAT lib_rng_RELOC21+2
+DAT lib_rng_RELOC22+1
+DAT lib_rng_RELOC23+1
+DAT lib_rng_RELOC24+1
+DAT lib_rng_RELOC25+1
+DAT lib_rng_RELOC26+1
+DAT lib_rng_RELOC27+1
+DAT lib_rng_RELOC28+1
+DAT lib_rng_RELOC29+1
+DAT lib_rng_RELOC30+1
+DAT lib_rng_RELOC31+1
+DAT lib_rng_RELOC32+1
+DAT lib_rng_RELOC33+1
+DAT lib_rng_RELOC34+1
+DAT lib_rng_RELOC35+1
+DAT lib_rng_RELOC36+1
+DAT lib_rng_RELOC37+1
+DAT lib_rng_RELOC38+1
+DAT lib_rng_RELOC39+1
+; End Relocation Table.
+DAT 39 ; Relocation table length.
+DAT 1 ; Lib version number
+DAT 0x0005 ; Lib ID
+DAT 2 ; Header version number.
+DAT 43 ; Library Header length.
+; End Library Header.

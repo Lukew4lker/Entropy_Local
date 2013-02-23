@@ -1,0 +1,279 @@
+; --------------------------------------------
+; Title:   driver_loader
+; Author:  Kelmoir
+; Date:    06.11.2012
+; Version: 1.0
+; --------------------------------------------
+; General: this Programm loads all the neccessary drives for the avaiable hardware.
+
+; note for self: fd_get_props will need 9 words of space, ptr to be handled over in b (, size gotta be the first 2 words
+
+
+
+:driver_loader 
+;		Table layout
+;		+----------+----+--------------------------------------------------------------+
+;		|Offset    |size|contains/purpose                                              |
+;		+----------+----+--------------------------------------------------------------+
+;		|0x0       |1   |the corresponding hardware number                             |
+;		|0x1       |2   |man ID, little endian                                         |
+;		|0x3       |2   |dev ID, little endian                                         |
+;		|0x5       |1   |hardware version                                              |
+;		|0x6       |1   |device class                                                  |
+;		|0x7       |1   |ptr to driver function table                                  |
+;		+----------+----+--------------------------------------------------------------+
+:.table_ptr
+	dat 0x0000
+:.num_drivers
+	dat 0x0000
+:.free_space_ptr
+	dat 0x0000
+
+
+;---------------------------------------------
+; Title:	driver_loader_load
+;
+; List of drives is being created, and all accessible drivere are loaded
+;
+; Params:	a - HWN of the initial Floppy driver
+;			b - Ptr to the initial Floppy driver Function table
+; deytroys:	all params
+; returns:  a - ptr to the driver table
+;---------------------------------------------
+:driver_loader_load
+	set	push,	c
+	set	push,	x
+	set	push,	y
+	set	push,	z							; running Index
+	set	push,	i							; last Index
+	set	push,	j							; ptr to the current table entry
+	set	[.hwn_ini_floppy],	a
+	set	[.ptr_ini_floppy],	b
+	hwn	c
+	set	i,		c
+	set	[driver_loader_num_drivers], 	c
+	jsr	driver_loader_create_table
+	; now enter the correct directory...
+	jsr	driver_loader_move_to_driver_dir
+	; now we can finally load the actual drivers into table, dunno what to do, when we can't load the corresponding driver, though
+	set	z,		0
+	:.loading_loop
+		set	a,		z
+		set	b,		[.ptr_ini_floppy]						; if we don't need to load the driver, then we have the correct value in b (ptr to driver)
+		ife	[.hwn_ini_floppy],	z							; we don't got the initial floppy? move the driver in
+			set	pc,		.initial_floppy
+		jsr	driver_loader_obtain_driver
+		set	a,		z
+		jsr	[b+2]											; init the driver, the initial floppy 
+		set	pc,		.update_table
+		:.initial_floppy
+		set	b,		[.ptr_ini_floppy]
+		:.update_table
+		set	j,		z
+		shl	j,		3
+		add	j,		driver_loader
+		set	[j+1],	z
+		set	[j+7],	b
+		jsr	[b+1]
+		set	[j+6],	a										; the driver will return it's class upon calling this function
+		set	push,	y
+		hwq	z
+		set	[j+1],	x
+		set	[j+2],	y
+		set	[j+3],	a
+		set	[j+4],	b
+		set	[j+5],	c
+		add	z,		1
+		ifg	z,		i
+			set	pc,	.end_loading_loop
+		set	pc,	.loading_loop
+	:.end_loading_loop
+	set	j,		pop
+	set	i,		pop
+	set	z,		pop
+	set	y,		pop
+	set	x,		pop
+	set	c,		pop
+	set	a,		[driver_loader_table_ptr]
+	set	pc,		pop
+;data
+:.hwn_ini_floppy
+	dat 0x0000
+:.ptr_ini_floppy
+	dat 0x0000
+	
+;---------------------------------------------
+; Title:	driver_loader_create_table
+; creates an empty Table for the drivers (and thus, allocates the space)
+;
+; Params:	c - Numer of rows the Table will need
+; returns:  none
+;---------------------------------------------
+:driver_loader_create_table
+; creates th
+	set	push,	a
+	set	push,	b
+	set	a,		c
+	mul	a,		8
+	set	b,		a
+	jsr	mm_request_memory
+	ife	a,		0xFFFF		; catastrophic failure
+		sub	p,	1
+	set	[driver_loader_table_ptr],	a
+	add	b,		a			; not pointer to first free word, if we can enlarge the current memory section
+	set	[driver_loader_free_space_ptr],	b
+	set	b,		pop
+	set	a,		pop
+	set	pc,		pop
+	
+	
+;---------------------------------------------
+; Title:	driver_loader_move_to_driver_dir
+;	
+; moves the loader into the driver folder, to acess the drivers
+;
+; Params:	none
+; returns:  none
+;---------------------------------------------	
+:driver_loader_move_to_driver_dir
+	set	push,	a
+	:.loop_root
+		set	a,	driver_loader_table_ptr			; just some chunk of free space to call the current wd, will get overwritten anyways. (and yes, it is dirty, but small)	
+		jsr	fd_get_wd
+		ife	[a],	0x0001			; "/", means root dir. If the the output changes, then I will need to adapt it...
+			ife	[a+1],	0x002F
+			set	pc,	.post_loop_root
+		; not in root dir, though :(
+		set	a,	.dir_up
+		jsr	fd_change_dir
+		set	pc,	.loop_root
+	:.post_loop_root
+	set	a,		.dir_drv
+	jsr	fd_change_dir
+	set	a,		pop
+	set	pc,		pop
+	; data
+	:.dir_up
+	dat	0x0002,	0x2E2E		;".."
+	:.dir_drv
+	dat	0x0003,	0x7264,	0x0076		;"drv"
+
+
+;---------------------------------------------
+; Title:	driver_loader_obtain_driver
+;	
+; loads the driver itself into the correct space
+; allocates the neccessary memory
+; recalulates the funtion table of the driver
+;
+; Params:	a - hwn of the device
+; returns:  b - ptr to the driver
+;---------------------------------------------	
+:driver_loader_obtain_driver
+	set	push,	c
+	jsr	driver_loader_open_driver_file
+;	jsr driver_loader_alloc_driver_memory
+	set	b,		a								; moving Params for functions
+	jsr	driver_loader_copy_driver
+	jsr	fd_close_file							; still got ptr/sector/WTFever in a
+	set	a,		c
+	jsr	driver_loader_recalc_function_table
+	set	c,		pop
+	set	pc,	pop
+	
+
+	
+;---------------------------------------------
+; Title:	driver_loader_open_driver_file
+;	
+; opens the correct file for the driver
+; so it can be extraced afterwards
+;
+; Params:	a - hwn of the device
+; returns:  a - ptr to file handler, etc  whatever fd_open_file returns :x
+;---------------------------------------------	
+:driver_loader_open_driver_file
+	set	push,	b
+	set	push,	c
+	set	push,	x
+	set	push,	y
+	set	push,	z
+	hwq	a		; obtain data to form the file name
+	set	[.filename],	12
+	set	[.filename+1],	x
+	set	[.filename+2],	y
+	set	[.filename+3],	a
+	set	[.filename+4],	b
+	set	[.filename+5],	0x642E
+	set	[.filename+6],	0x7672
+	set	a,		.filename
+	jsr	fd_open_file
+	set	z,		pop
+	set	y,		pop
+	set	x,		pop
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+;data
+	:.filename
+	dat 0x0000,	0x0000,	0x0000,	0x0000,	0x0000,	0x0000,	0x0000
+
+	
+;---------------------------------------------
+; Title:	driver_loader_copy_driver
+;	
+; tells the FD to copy the driver into ran, and then does the cleanup for the FD driver
+;
+; Params:	b - ptr to the file?? (unused, atm) but still the only thing I can hope to Identify the file with
+; returns:  c - ptr to the copied driver
+;---------------------------------------------		
+:driver_loader_copy_driver
+	set	push,	a
+	set	push,	b
+	set	a,		b
+	jsr	fd_get_props			; hopefully it just passes us the Metadata :x  in [a], hopefully (would mean, size is in [a+0xC]:[a+0xD]
+	set	[.file_size],	[a+0x0C]	; I don't expect a driver being bigger then 65k words - it would eat up more then the whole RAM alone
+	set	a,		b
+	jsr	fd_load_file			; according to the code it will load the file somewhere, we still need to shrink the allocated memory, as it did allocatefull sector wise - what smells here so bad?
+	set	c,		a
+	; shrinking
+	set	b,		[.file_size]
+	add	b,		0x0010			; the metadata is 0x0010 words, probable I need to add them aswell... - what smells here so bad?
+	and	b,		0xFE00			; enshure that we obtain Full sectors
+	ife	b,		[.file_size]	; exactly sector size? Nothing to do
+		set	pc,	.finish
+	add	b,		0x0200
+	sub	b,		[.file_size]	; now we know, how many words aren't neccessary...
+	jsr	mm_shrink_memory	
+	ifn	a,		0				; something went wrong?
+		set	pc,	.error
+	:.finish
+	set	a,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+	:.error
+	set	c,		0xFFFF
+	set	pc,	.finish
+	
+;data
+	:.file_size
+	dat 0x0000
+	:.file_ptr
+	dat 0x0000
+
+;---------------------------------------------
+; Title:	driver_loader_recalc_function_table
+;	
+; tells the FD to copy the driver into ran, and then does the cleanup for the FD driver
+;
+; Params:	a - ptr to the copied driver
+; returns:  a - ptr to the copied driver
+;---------------------------------------------		
+:driver_loader_recalc_function_table
+
+
+
+
+
+

@@ -1,0 +1,130 @@
+;UTILITIES by Lucus
+
+;This code may seem weird, but it should work and should be safe,
+;even when the process is preempted in the middle of executing this.
+
+:ut_pushr
+set ex, pop
+set push, a
+set push, b
+set push, c
+set push, i
+set push, j
+set push, x
+set push, y
+set push, z
+set pc, ex
+
+:ut_popr
+set ex, pop
+set z, pop
+set y, pop
+set x, pop
+set j, pop
+set i, pop
+set c, pop
+set b, pop
+set a, pop
+set pc, ex
+
+:ut_pushx
+xor ex, peek	;swap ex, peek
+xor peek, ex	;
+xor ex, peek	;
+set push, a
+set push, b
+set push, c
+set push, i
+set push, j
+set push, x
+set push, y
+set push, z
+set pc, ex
+
+:ut_popx
+set ex, pop
+set z, pop
+set y, pop
+set x, pop
+set j, pop
+set i, pop
+set c, pop
+set b, pop
+set a, pop
+xor ex, peek	;swap ex, peek
+xor peek, ex	;
+xor ex, peek	;
+set pc, pop
+
+:ut_copy_mem
+add a, i
+set push, a
+sub a, 16
+ifg i, a
+set pc, .next
+add a, 1
+:.loop_a
+sti [j], [i]
+sti [j], [i]
+sti [j], [i]
+sti [j], [i]
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i]
+sti [j], [i]
+sti [j], [i]
+sti [j], [i]
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i] ;
+ifg a, i
+set pc, .loop_a
+:.next
+set a, pop
+ife i, a
+set pc, pop
+:.loop_b
+sti [j], [i]
+ifn i, a
+set pc, .loop_b
+set pc, pop
+
+:ut_fill_mem
+sub j, a
+add a, i
+set push, a
+sub a, 16
+ifg i, a
+set pc, .next
+add a, 1
+:.loop_a
+sti [i], b
+sti [i], b
+sti [i], b
+sti [i], b
+sti [i], b ;
+sti [i], b ;
+sti [i], b ;
+sti [i], b ;
+sti [i], b
+sti [i], b
+sti [i], b
+sti [i], b
+sti [i], b ;
+sti [i], b ;
+sti [i], b ;
+sti [i], b ;
+ifg a, i
+set pc, .loop_a
+:.next
+set a, pop
+ife i, a
+set pc, pop
+:.loop_b
+sti [i], b
+ifn i, a
+set pc, .loop_b
+set pc, pop

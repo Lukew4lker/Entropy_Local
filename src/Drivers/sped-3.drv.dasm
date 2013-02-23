@@ -1,0 +1,68 @@
+;DRIVER FOR THE SPED-3
+;@see thePalindrome
+
+;@name init
+;Takes A as the ID of the SPED-3
+;@param A
+:init
+    .longform
+	:RELOC01 SET [spedID], A
+	.shortform
+	SET PC, POP
+	
+;@name pollDevice
+;Sets B to the current state and C to the last error since the last device poll
+;@return B
+;@return C
+:pollDevice
+    SET PUSH, A
+	SET A, 0
+	.longform
+	:RELOC02 HWI [spedID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name mapRegion
+;Sets the memory map offset to X, and the total number of vertices to render to Y.
+;@param X
+;@param Y
+:mapRegion
+    SET PUSH, A
+	SET A, 1
+	.longform
+	:RELOC03 HWI [spedID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+
+;@name rotDevice
+;Sets the target rotation for the device to X%360 degrees.
+;@param X
+:rotDevice
+    SET PUSH, A
+	SET A, 2
+	.longform
+	:RELOC04 HWI [spedID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+
+:spedID dat 0x0000
+;HEADER
+;FUNCTION TABLE
+dat init
+dat pollDevice
+dat mapRegion
+dat rotDevice
+;RELOC TABLE
+dat RELOC01+2
+dat RELOC02+1
+dat RELOC03+1
+dat RELOC04+1
+;END OF RELOC TABLE
+dat 0x0004 ; RELOC TABLE LENGTH
+dat 0x0001 ; VERSION
+dat getHardwareID ; HARDWARE ID FUNC
+dat 0xFFFF ; HEADER VERSION
+dat 0x000D ; SIZE

@@ -1,0 +1,84 @@
+							Spec of the interface and reloatability and other stuff all drivers must provide
+
+General:
+	Since drivers must be able to being loaded dynamically, they must be relocatable and provide
+	an appopriate interface.
+	It can't be assumed, that every dcpu got has the same amount of the same peripherals attached to it.
+	Every driver must to be relocatable and being capable of storing ALL data it needs to operate.
+	Every driver must provide an Standart Interface, where Offset 1 and 2 must be equal for ALL drivers.
+	All other entrys must be equal for all drivers of one device class.
+
+Funtion Table:
+	Purpose:
+		The function table serves as an entry point to the driver, higher level software can use to acess the driver.
+		The function table and all function pointers have to be recalulated after load by the driver loader.
+		Thus it serves also as an relocation table.
+		
+	Layout:
+		+----------+----+--------------------------------------------------------------+
+		|Offset    |size|contains/purpose                                              |
+		+----------+----+--------------------------------------------------------------+
+		|0x0       |1   |Entry point and number of function entrys  Y                  |
+		|0x1       |1   |Pointer to .get_hardware_class function (return: a -> class)  |
+		|0x2       |1   |Pointer to .init function    (param: a -> hardware number)    |
+		|0x3 - 0xY |Y-2 |Pointers to the functions stored inside the driver            |
+		+----------+----+--------------------------------------------------------------+
+	
+	Example:
+		:SPED_3
+			dat 0x000b								; number of functions here -> recalculating of pointers possible
+			dat	.get_hardware_class					;+0x1			neccessary for all drivers
+			dat .init								;+0x2           neccessary for all drivers
+			dat .edit_vertex						;+0x3
+			dat .draw								;+0x4
+			dat .rotate								;+0x5
+			dat .set_num_vertexes					;+0x6
+			dat .get_max_num_vertexes				;+0x7
+			dat .get_num_colors						;+0x8
+			dat	.get_invis_color					;+0x9
+			dat .get_screen_dimension				;+0xa
+			dat .get_num_intensities				;+0xb
+
+Device class:
+	Purpose:
+		To Identify an display as an display, a weapon as an Weapon, or an thruster as an thuster, etc.
+		They will help to organize similar devices with similar functions into groups, that can being handled by some.
+		high-level software at once.
+		
+	Layout:
+		0xMMSS
+		MM: Meta class index. I.e ship weapons will all have 0x07XX
+		SS:	Sub class index. I.e anti-capital-laser-guns will have 0x0701
+		Note: SS of 00 addresses all Sub classes belonging to the Meta class
+	
+	Classes: (non used values are reserved, add them here before using them - first come, first serve)
+		0x0100		2-D Monitors
+			0x0101	lem1802 compatible
+		0x0200		user input devices
+			0x0201	generic keybord compatible
+		0x0300		non volatile memory devices
+			0x0301	M35FD floppy compatible
+		0x0400		DCPU-internal devices
+			0x0401	clock compatible
+		0x0500		3-D Monitors
+			0x0501	SPED-3 compatible
+		0x0600		time and space bending devices
+			0x0601	SPC-2000 compatible
+		0x0700		ship eapons (gun/turret class)
+			0x0701	anti-capital-laser-gun compatible
+		0x0800		thrusters
+		0x0900		sensors
+
+Files/naming:
+	Drivers must be located in the /drv folder of the main boot disk.
+	Drivers must be .drv file type.
+	the name of the driver file must be it's manId and devId in little endian.
+	w0: manIdLo
+	w1: manIdHi
+	w2: devIdLo
+	w3: devIdHi
+
+Tasks:
+	Drivers must be relocatable by default.
+	Except for the funtion table and the corresponding funtions, no external re-editing of labels must be neccessary.
+	

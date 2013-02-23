@@ -1,0 +1,131 @@
+; DRIVER FOR THE LEM1820
+;@see thePalindrome
+
+;@name init
+;initializes the screen, taking A as the ID, and B as the location to set up vid RAM (set to 0 to default to 0x8000
+;@param A, B
+;@destroy C
+:init
+    IFE B, 0
+	    SET B, 0x8000
+    SET C, A
+	SET A, 0
+	HWI A
+	.longform
+	:RELOC01 SET [lemID], A
+	.shortform
+	SET PC, POP
+	
+;@name setVidRam
+;Sets the screen's RAM to the address at B
+;@param B
+:setVidRAM
+    SET PUSH, A
+	SET A, 0
+	.longform
+	:RELOC05 HWI [lemID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name setFont
+;sets the font from B
+;@param B
+:setFont
+    SET PUSH, A
+    SET A, 1
+	.longform
+	:RELOC02 HWI [lemID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name setPalette
+;maps LEM palette to the address at B
+;@param B
+:setPalette
+    SET PUSH, A
+    SET A, 2
+	.longform
+	:RELOC03 HWI [lemID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name setBorderColor
+;sets LEM border color to B&0xF
+;@param B
+:setBorderColor
+    SET PUSH, A
+	SET A, 3
+	.longform
+	:RELOC04 HWI [lemID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name dumpFont
+;Dumps LEM font to the address at B
+;NOTE: It is the CALLER'S responsibility to free this!
+;@returns B
+:dumpFont
+    SET PUSH, A
+	SET A, 256
+	JSR [0x2]
+	SET B, A
+	SET A, 4
+	.longform
+	:RELOC06 HWI [lemID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name dumpPalette
+;Dumps LEM palette to the address at B
+;NOTE: It is the CALLER'S responsibility to free this!
+;@returns B
+:dumpPalette
+    SET PUSH, A
+	SET A, 0x10
+	JSR [0x2]
+	SET B, A
+	SET A, 5
+	.longform
+	:RELOC07 HWI [lemID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+
+:getHardwareID
+    SET B, 0x7349
+	SET A, 0xF615
+	SET C, 0x1802
+	SET PC, POP
+
+;----------------------------
+;|         VARS             |
+;----------------------------
+:lemID dat 0x000
+;HEADER
+;FUNCTION TABLE
+dat init
+dat setVidRam
+dat setFont
+dat setPalette
+dat setBorderColor
+dat dumpFont
+dat dumpPalette
+;RELOC TABLE
+dat RELOC01+2
+dat RELOC02+1
+dat RELOC03+1
+dat RELOC04+1
+dat RELOC05+1
+dat RELOC06+1
+dat RELOC07+1
+;END OF RELOC TABLE
+dat 0x0007 ; RELOC TABLE LENGTH
+dat 0x0001 ; VERSION
+dat getHardwareID ; HARDWARE ID FUNC
+dat 0xFFFF ; HEADER VERSION
+dat 0x0013 ; SIZE

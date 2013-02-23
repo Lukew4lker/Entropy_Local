@@ -1,0 +1,168 @@
+; --------------------------------------------
+; Title:   generic_keyboard
+; Author:  Kelmoir
+; Date:    07.11.2012
+; Version: 1.0
+; --------------------------------------------
+;---------------------------------------------
+;Entry point, contains the vectors of all functions here
+;---------------------------------------------
+:generic_keyboard
+	dat 0x0006								; number of functions here -> automatic readapting of pointers possible
+	dat .get_hardware_class					;+0x1
+	dat .init								;+0x2
+	dat .get_char							;+0x3
+	dat .check_if_char_pressed				;+0x4
+	dat .set_interrupt_msg					;+0x5
+	dat .interrupt_handler					;+0x6
+
+:.IRQ
+	dat 0x0000
+:.buffer
+	#reserve 0x10
+:.buffer_ptr_rd
+	dat 0x0000
+:.buffer_ptr_wr
+	dat 0x0000
+:.keys_pressed
+	#reserve 0x10
+:.int_active				; other sources must be used, if no Interrupts are active
+	dat 0x0000
+:.pproc_message				; if Interrupt happens, which process to wake up?
+	dat 0x0000
+
+;---------------------------------------------
+; Title:	generic_keyboard_get_hardware_class
+;
+; gets the device class according to the entropy spec
+;
+; Params:	none
+; returns:  a - hardware class
+;---------------------------------------------
+:.get_hardware_class
+	set	a,		0x0201
+	set	pc,		pop
+	
+;---------------------------------------------
+; Title:	generic_keyboard_init
+;
+; sets the IRQ for the Keyboard
+; if Interrupts want to be enabled, and thus, an driver internal queue/track of 
+; pressed Keys, Offset 0x5 and 0x6 are neccessary
+;
+; Params:	a IRQ for the keyboard
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.init
+	set	push,	b
+	set	b,		pc
+	:.base1
+	sub	b,		.base1
+	set	[b+.IRQ],	a
+	set	a,		0
+	HWI	[b+.IRQ]
+	set	b,		pop
+	set	pc,		pop
+
+;---------------------------------------------
+; Title:	generic_keyboard_get_char
+;
+; ready the next char out of the corresponding buffer
+; (keayboard, if 
+;
+; Params:	none
+; returns:  a - Key, corresponsding to Keyboard spec
+;---------------------------------------------
+:.get_char
+	set	push,	b
+	set	push,	c
+	set	push,	x
+	set	x,		pc
+	:.base2
+	sub	x,		.base2
+	set	a,		0
+	ifn	[b+.int_active],	0					; Interrupts active? use internal Queue
+		add	pc,		.get_char_driver_queue - .base3		
+		:.base3
+	set	a,		1								; No Interrupts active? use Keyboard queue
+	HWI	[b+.IRQ]
+	set	a,		c
+	add	pc,		.get_char_end - .base4
+:.base4
+:.get_char_driver_queue
+	ife	[b+.buffer_ptr_rd],		[b+.buffer_ptr_wr]
+		add	pc,		.get_char_end - .base5
+:.base5
+	set	c,	b										; something in the Buffer? then read it and adjust the reading pointer
+	add	c,	[b+.buffer_ptr_wr]
+	set	a,	[c+.buffer]
+	add	[b+.buffer_ptr_wr],		1
+	and	[b+.buffer_ptr_wr],		0x000F
+:.get_char_end
+	set	x,		pop
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+;---------------------------------------------
+; Title:	generic_keyboard_check_if_char_pressed
+;
+; does a check, if the requested Key is pressed
+;
+; Params:	a - the Keycode to check for
+; returns:  a - 0 - no, 1 - key is pressed
+;---------------------------------------------	
+:.check_if_char_pressed
+	set	push,	b
+	set	push,	c
+	set	push,	x
+	set	x,		pc					; obtain the correct address
+	:.base6
+	sub	x,		.base6
+	set	b,		a
+	set	a,		2
+	HWI	[x+.IRQ]					; just asking the Keyboard, if the char was pressed
+	set	a,		c
+	set	x,		pop
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+	
+;---------------------------------------------
+; Title:	generic_keyboard_set_interrupt_msg
+;
+; sets the Keyboard interrupt msg
+; Do not forget, to add the Interrupt handler of the driver to the Interrupt vector Table
+;
+; Params:	a - the proposed interrupt message
+; Destroys: all params
+; returns:  none
+;---------------------------------------------	
+:.set_interrupt_msg
+	set	push,	b
+	set	push,	c
+	set	c,		pc
+:.base7
+	sub	c,		.base7
+	set	b,		a
+	hwi	[c+.IRQ]
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+;---------------------------------------------
+; Title:	generic_keyboard_interrupt handler
+;
+; handles the Interrupts by the Keyboard
+; putting typd Queues into queue, and checking for pushing them
+; not really know, what do do yet..
+;
+; Params:	none
+; returns:  none
+;---------------------------------------------	
+:.interrupt_handler	
+
+
+	set	pc,		pop

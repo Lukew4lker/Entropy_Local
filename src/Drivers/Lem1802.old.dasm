@@ -1,0 +1,398 @@
+; --------------------------------------------
+; Title:   lem1802
+; Author:  Kelmoir
+; Date:    06.11.2012
+; Version: 1.0
+; --------------------------------------------
+;---------------------------------------------
+;Entry point, contains the vectors of all functions here
+;---------------------------------------------
+:lem1802
+	dat 0x0011								; number of functions here -> automatic readapting of pointers possible
+	dat .get_hardware_class					;+0x1
+	dat .init								;+0x2
+	dat .set_border_color					;+0x3
+	dat .set_cursor_fg_color				;+0x4
+	dat .set_cursor_bg_color				;+0x5
+	dat .put_char							;+0x6
+	dat .clr_scr							;+0x7
+	dat	.set_cursor_pos						;+0x8
+	dat	.get_cursor_pos						;+0x9
+	dat	.set_cursor_blink					;+0xa
+	dat	.set_font_space						;+0xb
+	dat	.set_palette_space					;+0xc
+	dat	.mem_dump_font						;+0xd
+	dat	.mem_dump_palette					;+0xe
+	dat	.get_num_lines						;+0xf
+	dat	.get_num_chars_per_line				;+0x10
+	dat	.get_num_colors						;+0x11
+	
+	
+:.draw_memory
+	#reserve 0x0180
+:.cursor_pos
+	dat 0x0000
+:.cursor_color
+	dat 0x0000
+:.cursor_blink
+	dat 0x0000
+:.IRQ
+	dat 0x0000
+	
+	
+;---------------------------------------------
+; Title:	lem1802_get_hardware_class
+;
+; gets the device class according to the entropy spec
+;
+; Params:	none
+; returns:  a - hardware class
+;---------------------------------------------
+:.get_hardware_class
+	set	a,		0x0101
+	set	pc,		pop
+
+;---------------------------------------------	
+; Title:	lem1802_init
+;
+; initializes the lem1802.
+; it uses the internal fonr and color map.
+;
+; Params:	a - the IRQ of the lem1802
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.init
+	set	push,	b
+	set	push,	c
+	set	b,		pc
+	:.base1
+	sub	b,		.base1
+	set	c,		b
+	set	[c+.IRQ],	a
+	add	b,		.draw_memory
+	set	a,		0
+	HWI	[c+.IRQ]
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+
+;---------------------------------------------	
+; Title:	lem1802_set_border_color
+;
+; sets the color of the border
+;
+; Params:	a - the index to the desired color
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.set_border_color
+	set	push,	b
+	set	push,	c
+	set	c,		pc
+	:.base2
+	sub	c,		.base2
+	set	b,		a
+	set	a,		3
+	HWI	[c+.IRQ]
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+	
+;---------------------------------------------	
+; Title:	lem1802_set_cursor_fg_color
+;
+; sets the foregrund color of the cursor
+;
+; Params:	a - the index to the desired color
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.set_cursor_fg_color
+	set	push,	b
+	set	b,		pc
+	:.base3
+	sub	b,		.base3
+	and	a,		0x000F
+	shl	a,		0x000C
+	and	[b+.cursor_color],	0x0F00
+	bor	[b+.cursor_color],	a
+	set	b,		pop
+	set	pc,		pop
+	
+;---------------------------------------------	
+; Title:	lem1802_set_cursor_fg_color
+;
+; sets the foregrund color of the cursor
+;
+; Params:	a - the index to the desired color
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.set_cursor_bg_color
+	set	push,	b
+	set	b,		pc
+	:.base4
+	sub	b,		.base4
+	and	a,		0x000F
+	shl	a,		0x0008
+	and	[b+.cursor_color],	0xFF00
+	bor	[b+.cursor_color],	a
+	set	b,		pop
+	set	pc,		pop
+	
+	
+;---------------------------------------------	
+; Title:	lem1802_put_char
+;
+; puts out a single char.
+; does not relocate the cursor. That is up to the caller, to take care of that
+;
+; Params:	a the char to output
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.put_char
+	set	push,	b
+	set	b,		pc
+	:.base5
+	sub	b,		.base5
+	and a,		0x007F
+	bor	a,		[b+.cursor_color]
+	add	b,		[b+.cursor_pos]
+	and	[b+.draw_memory],	0x0080			; keep the blink flag, if there is any
+	bor	[b+.draw_memory],	a
+	set	b,		pop
+	set	pc,		pop
+
+;---------------------------------------------	
+; Title:	lem1802_clr_scr
+;
+; will fill the entire display memory with 0xfb20		//note: f/b are meaning the foreground/background color
+;
+; Params:	none
+; returns:  none
+;---------------------------------------------
+:.clr_scr
+	set	push,	a							; ptr to dispplay memory (running index)
+	set	push,	b							; ptr to cancel run segment
+	set	push,	c							; ptr to base
+	set	push,	x
+	set	c,		pc
+	:.base6
+	sub	c,		.base6
+	set	a,		c
+	add	a,		.draw_memory
+	set	b,		a
+	add	b,		0x0180
+	set	x,		[c+.cursor_color]
+	add	x,		0x0020
+	:.clr_scr_loop
+		set	[a],	x
+		add	a,		1
+		ifl	a,		b
+			sub	pc,		.base7 - .clr_scr_loop	
+			:.base7
+	set	x,		pop
+	set	c,		pop
+	set	b,		pop
+	set	a,		pop
+	set	pc,		pop
+	
+;---------------------------------------------	
+; Title:	lem1802_set_cursor_pos
+;
+; sets the cursor to the specified position. If the position is wrong, it will be set to 0
+;
+; Params:	a, cursor position
+; Destroys: all params
+; returns:  none
+;---------------------------------------------	
+:.set_cursor_pos	
+	set	push,	b
+	set	push,	c
+	set	b,		pc
+	:.base8
+	sub	b,		.base8
+	set	c,		b
+	add	c,		.draw_memory
+	add	c,		[b+.cursor_pos]
+	and	[c],	0xFF7F
+	sub	c,		[b+.cursor_pos]
+	ifg	a,		0x017F
+		set	a,		0
+	set	[b+.cursor_pos],	a
+	add	c,		[b+.cursor_pos]
+	bor	[c],	[b+.cursor_blink]
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+
+;---------------------------------------------	
+; Title:	lem1802_get_cursor_pos
+;
+; gets the position of the cursor (although the calling routine should keep track of that)
+;
+; Params:	none
+; returns:  a - cursor position
+;---------------------------------------------		
+:.get_cursor_pos	
+	set	push,	b
+	set	b,		pc
+	:.base9
+	sub	b,		.base9
+	set	a,		[b+.cursor_pos]
+	set	b,		pop
+	set	pc,		pop
+
+;---------------------------------------------	
+; Title:	lem1802_set_cursor_blink
+;
+; sets or resets the blinking of the cursor
+;
+; Params:	a, cursor position
+; Destroys: all params
+; returns:  none
+;---------------------------------------------	
+:.set_cursor_blink
+	set	push,	b
+	set	b,		pc
+	:.base10
+	sub	b,		.base10
+	and	a,		0x0001
+	shl	a,		7
+	set	[b+.cursor_blink],	a
+	add	b,		.draw_memory
+	and	[b+.cursor_pos],	0xFF7F
+	bor	[b+.cursor_pos],	a
+	set	b,		pop
+	set	pc,		pop
+	
+;---------------------------------------------
+; Title:	lem1802_set_font space
+;
+; sets the font space for the lem to the desired location
+; As always, the caller is responsible to provide enough space for this
+;
+; Params:	a - ptr to the font space
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.set_font_space
+	set	push,	b
+	set	push,	c
+	set	b,		a
+	set	c,		pc
+	:.base11
+	sub	c,		.base11
+	set	a,		1
+	HWI	[c+.IRQ]
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+;---------------------------------------------
+; Title:	lem1802_set_palette_space
+;
+; sets the fpalette space for the lem to the desired location
+; As always, the caller is responsible to provide enough space for this
+;
+; Params:	a - ptr to the palette space
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.set_palette_space
+	set	push,	b
+	set	push,	c
+	set	b,		a
+	set	c,		pc
+	:.base12
+	sub	c,		.base12
+	set	a,		2
+	HWI	[c+.IRQ]
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+;---------------------------------------------
+; Title:	lem1802_mem_dunp_font
+;
+; orders the lem to create an memdunp of the font pace to the desired location
+; As always, the caller is responsible to provide enough space for this
+;
+; Params:	a - ptr to the font space
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.mem_dump_font
+	set	push,	b
+	set	push,	c
+	set	b,		a
+	set	c,		pc
+	:.base13
+	sub	c,		.base13
+	set	a,		4
+	HWI	[c+.IRQ]
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+
+;---------------------------------------------
+; Title:	lem1802_mem_dunp_palette
+;
+; orders the lem to create an memdunp of the font pace to the desired location
+; As always, the caller is responsible to provide enough space for this
+;
+; Params:	a - ptr to the palette space
+; Destroys: all params
+; returns:  none
+;---------------------------------------------
+:.mem_dump_palette
+	set	push,	b
+	set	push,	c
+	set	b,		a
+	set	c,		pc
+	:.base14
+	sub	c,		.base14
+	set	a,		5
+	HWI	[c+.IRQ]
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+;---------------------------------------------
+; Title:	lem1802_get_num_lines
+;
+; gets the number of printable lines for the Lem1802
+;
+; Params:	none
+; returns:  a - number of lines
+;---------------------------------------------
+:.get_num_lines
+	set	a,		12
+	set	pc,		pop
+	
+;---------------------------------------------
+; Title:	lem1802_get_num_chars_per_line
+;
+; get the number of characters per line for the lem1802
+;
+; Params:	none
+; returns:  a - characters per line
+;---------------------------------------------
+:.get_num_chars_per_line
+	set	a,		32
+	set	pc,		pop
+
+;---------------------------------------------
+; Title:	lem1802_get_num_colors
+;
+; gets the amount of applicable colors
+;
+; Params:	none
+; returns:  a - number od colors
+;---------------------------------------------
+:.get_num_colors
+	set	a,		16
+	set	pc,		pop

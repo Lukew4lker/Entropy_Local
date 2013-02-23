@@ -1,0 +1,49 @@
+The library and driver header file goes at the end, so this file
+will give word positions relative to the end of the file:
+
+WORD:            Function:
+0                header size (include this word!)
+-1               lib header version number (see below)
+-2               lib ID/pointer to driver hardware ID func(see below)
+-3               lib version number
+-4               length of relocation table
+-5               relocation table (see below)
+-pastRelocTable  function table (see below)
+
+VERSION NUMBERS:
+Lib header versions start at 1, whilst drivers start at 0xFFFF
+
+RELOCATION TABLE:
+If you reference ANY memory location, you have to relocate it.
+To do so, you surround it with .longform and .shortform, and
+precede with a label, like so:
+
+.longform
+:lib_STDIO_RELOC55 SET C, [lib_STDIO_Projector_StackPos]
+.shortform
+
+When placing the label inside the relocation table, there's
+some rules that you have to remember:
+
+For a JSR statement, relocate like so:
+dat lib_STDIO_RELOC36+1
+
+FOR SET, ADD, and SUB (at least)
+Assuming :RELOC11 SET A, [0xBEEF]
+dat RELOC11+1
+
+Assuming :RELOC12 SET [0xBEEF], A
+dat RELOC12+2
+
+FUNCTION TABLE
+This is just dat statements of the functions in the lib
+example:
+dat lib_STDIO_init
+dat lib_STDIO_getChar
+...
+
+YOU DO NOT NEED TO RELOCATE FUNCTIONS, THE LIB LOADER DOES IT!
+
+HARDWARE ID:
+This is a (non-relocated) memory address of the function that
+returns the hardware ID that the driver handles.

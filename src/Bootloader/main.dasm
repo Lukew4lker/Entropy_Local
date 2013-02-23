@@ -1,0 +1,98 @@
+;Bootloader by Lucus
+
+;Loops through all devices until it finds a drive with a bootable disk,
+;then loads all reserved sectors from it.
+;This will produce a 128 kB file when built.
+
+set pc, move
+
+;This code expects to start at 0xff02
+set i, 0
+hwn z
+:loop_a
+ife i, z
+set i, 0
+hwq i
+ife a, 0x24c5
+ife b, 0x4fd5
+ife c, 0x000b
+ife x, 0x7e91
+ife y, 0x1eb3
+set pc, m35fd_found + 0xff00
+sti pc, loop_a + 0xff00
+:m35fd_found
+set a, 0
+hwi i
+ifn b, 1
+ifn b, 2
+sti pc, loop_a + 0xff00
+set a, 2
+set x, 0
+set y, 0
+hwi i
+ifn b, 1
+sti pc, loop_a + 0xff00
+set a, 0
+:loop_b
+hwi i
+ife b, 3
+set pc, loop_b + 0xff00
+ifn [0x0], {add pc, 15} ;Flags disk bootable
+sti pc, loop_a + 0xff00
+;Found bootable disk!
+set [0xffff], i
+set z, [0x8] ;Number of reserved sectors
+sub z, 1
+ifg z, 0x7e
+set z, 0x7e
+set a, 2
+set x, 1
+set y, 0x200
+:loop_c
+ifg x, z
+set pc, boot + 0xff00
+hwi i
+add x, 1
+add y, 0x200
+set a, 0
+:loop_c_a
+hwi i
+ife b, 3
+set pc, loop_c_a + 0xff00
+set a, 2
+set pc, loop_c + 0xff00
+:boot
+set z, 0
+set y, 0
+set x, 0
+set j, 0
+set i, 0
+set c, 0
+set b, 0
+set a, 0
+set ex, 0
+set pc, 0
+
+:move
+set i, 2
+set j, 0xff02
+:loop_d
+sti [j], [i]
+sti [j], [i]
+sti [j], [i]
+sti [j], [i]
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i]
+sti [j], [i]
+sti [j], [i]
+sti [j], [i]
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i] ;
+sti [j], [i] ;
+ifl i, move
+set pc, loop_d
+set pc, 0xff02

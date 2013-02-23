@@ -1,0 +1,8 @@
+1 Generic Clock
+0 SPED-3
+0 Suspension Chamber 2000
+2 M35FD Floppy drives
+1 LEM 1802 Screen
+1 Generic Keyboard
+
+DO NOT CHANGE THE ORDER OF THE ABOVE LINES, you can change the numbers, as long as there's a space between the numbers and names.

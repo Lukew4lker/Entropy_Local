@@ -1,0 +1,88 @@
+;DRIVER FOR THE KEYBOARD!
+;@see thePalindrome
+
+;@name init
+;Takes A as the ID of the keyboard
+;@param A
+:init
+    .longform
+	:RELOC01 SET [keyboardID], A
+	.shortform
+    SET PC, POP
+
+;@name clearBuffer
+;Clears the keyboard buffer
+:clearBuffer
+    SET PUSH, A
+    SET A, 0
+	.longform
+	:RELOC02 HWI [keyboardID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name getKey
+;Stores the next key typed in C register, or 0 if buffer is empty
+;@return C
+:getKey
+    SET PUSH, A
+    SET A, 1
+	.longform
+	:RELOC03 HWI [keyboardID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name isPressed
+;Set C register to 1 if the key specified by the B register is pressed, or 0 if it's not pressed
+;@param B
+;@return C
+:isPressed
+    SET PUSH, A
+	SET A, 2
+	.longform
+	:RELOC04 HWI [keyboardID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+	
+;@name enableInterrupts
+;If register B is non-zero, turn on interrupts with message B. If B is zero, disable interrupts
+;@param B
+:enableInterrupts
+    SET PUSH, A
+	SET A, 3
+	.longform
+	:RELOC05 HWI [keyboardID]
+	.shortform
+	SET A, POP
+	SET PC, POP
+
+
+:getHardwareID
+    SET B, 0x7406
+	SET A, 0x30CF
+	SET C, 1
+	SET PC, POP
+	
+:keyboardID dat 0x0000
+
+;HEADER
+;FUNCTION TABLE
+dat init
+dat clearbuffer
+dat getKey
+dat isPressed
+dat enableInterrupts
+;RELOC TABLE
+dat RELOC01+2
+dat RELOC02+1
+dat RELOC03+1
+dat RELOC04+1
+dat RELOC05+1
+;END OF RELOC TABLE
+dat 0x0005 ; RELOC TABLE LENGTH
+dat 0x0001 ; VERSION
+dat getHardwareID ; HARDWARE ID FUNC
+dat 0xFFFF ; HEADER VERSION
+dat 0x000F ; SIZE

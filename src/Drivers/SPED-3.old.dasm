@@ -1,0 +1,293 @@
+; --------------------------------------------
+; Title:   SPED-3
+; Author:  Kelmoir
+; Date:    03.11.2012
+; Version: 1.0
+; --------------------------------------------
+
+;---------------------------------------------
+;Entry point, contains the vectors of all functions here
+;---------------------------------------------
+:SPED_3
+	dat 0x000b								; number of functions here -> automatic readapting of pointers possible
+	dat	.get_hardware_class					;+0x1
+	dat .init								;+0x2
+	dat .edit_vertex						;+0x3
+	dat .draw								;+0x4
+	dat .rotate								;+0x5
+	dat .set_num_vertexes					;+0x6
+	dat .get_max_num_vertexes				;+0x7
+	dat .get_num_colors						;+0x8
+	dat	.get_invis_color					;+0x9
+	dat .get_screen_dimension				;+0xa
+	dat .get_num_intensities				;+0xb
+
+
+
+
+;---------------------------------------------
+; Title:	Variables
+;---------------------------------------------
+
+:.vertexes					; 0x80 vertices á 2 words  First word: YYYYYYYYXXXXXXXX   Second word: 00000ICCZZZZZZZZ
+	#reserve 0x0100
+:.num_vertexes
+	DAT 0x0000
+:.IRQ						; the Numer to address the hardware with
+	DAT 0x0000
+	
+	
+#equ Offset1	-.base1 + .IRQ
+	
+;---------------------------------------------
+; Title:	SPED_3_get_hardware_class
+;
+; gets the device class according to the entropy spec
+;
+; Params:	none
+; returns:  a - hardware class
+;---------------------------------------------
+:.get_hardware_class
+	set	a,		0x0501
+	set	pc,		pop
+	
+	
+;---------------------------------------------
+; Title:	SPED_3_init
+;
+; will initiate the Driver and Memory to be ready for drawing
+; 
+; Params:	A - HWN of the SPED-3
+; returns:  A:	0 - successful
+;				0xFFFF - failure
+;---------------------------------------------
+:.init
+	set	push,	b				; b is temp for relative data acess
+	set	push, 	c
+	set	push,	x
+	set	push,	y
+	set	b,		pc
+	:.base1
+	sub	b,	.base1					; for Assembler errata :x
+	set	[b + .IRQ],	a
+	set	[b + .num_vertexes], 0
+	set	a,		1
+	add	b,		.vertexes			;the DPU can't register+next word x
+	set	x,		b
+	sub	b,		.vertexes
+	set	y,		0					; we start with 0, thus we will need to adapt things as we add vertices
+	HWI	[b + .IRQ]
+	set	a,		0
+	HWI	[b + .IRQ]						; did everything run smoothly? - directly passing the error code
+	set	a,		c
+	set	y,		pop
+	set	x,		pop
+	set	c,		pop
+	set	b,		pop
+	set pc,		pop
+	
+	
+;---------------------------------------------
+; Title:	SPED_3_edit_vertex
+;
+; edits one vertex, or add it, if the index requires it.
+; it won't update the SPED-3 driver to add new vertexes to the drawing range!
+;
+; Params:	A - Index of Vertex & 0x007F, note: If (Index == 0xFFFF || Index > Num_vertexes) then it will append the vertrex to the current array of vertexes
+;			B - Px & 0x00FF
+;			C - Py & 0x00FF
+;			X - Pz & 0x00FF
+;			Y - color & 0x0003
+;			Z - Intensity & 0x0001
+;			overflows will being cut off silently
+; Destroys: all params
+; returns:  A:	index of vertex
+; Side effects: The corresponding vertex will change to the new value. If it was being drawn before, it will change on screen
+;---------------------------------------------
+:.edit_vertex
+	set	push,	i
+	set	i,		pc
+	:.base2
+	sub	i,		.base2					; for Assembler errata :x
+	ife	a, 		0xFFFF
+		set	a,		[i + .num_vertexes]				; if 0xFFFF then just append
+	ifg	a,		[i + .num_vertexes]					; and ensure, that the index don't got any holes in between
+		set	a,		[i + .num_vertexes]
+	;sanitise the inputs, silently
+	and	a, 		0x007F							
+	and	b,		0x00FF
+	and	c,		0x00FF
+	and x,		0x00FF
+	and	y,		0x0003
+	and	z,		0x0001
+	shl	a,		1			; 2 words per vertex, adpapt offset
+	add	a,		i 	; to have a relative addessed
+	; now create a new vertex in the correpondind memory
+	shl	c,		8
+	bor	b,		c
+	set [a + .vertexes],	b
+	shl	y,		8
+	shl	z,		10
+	bor	x,		y
+	bor	x,		z
+	add	a,		1
+	set	[a + .vertexes],	x
+	; check if it was a new vertex, and add the number
+	sub	a,		i
+	shr	a,		1					; restore the index of the vertex
+	ife	a,		[i + .num_vertexes]
+		ifl	a,		0x0080
+			; we got a new vertex, we need to add it to the drawing range
+			add	[i + .num_vertexes],	1
+	set	i,		pop
+	set	pc,		pop
+
+
+;---------------------------------------------
+; Title:	SPED_3_draw
+;
+; updates the number of vertexes to draw on the "screen"
+; 
+; Params:	none
+; returns:  A:	0 - sucessful
+;				0xFFFF - failure
+; Side effects: SPED-3 will draw all Vertexes queued in the corresponding memory according to num_vertexes
+;---------------------------------------------
+:.draw
+	set	push,	b
+	set	push,	c
+	set	push,	x
+	set	push,	y
+	set	push,	z
+	set	z,		pc
+	:.base3
+	sub	z,		.base3
+	set	a, 1
+	add	z,		.vertexes
+	set	x,		z
+	sub	z,		.vertexes
+	set	y,		[z + .num_vertexes]
+	HWI	[z + .IRQ]
+	set	a,		0
+	HWI	[z + .IRQ]
+	set	a,		c
+	set	z,		pop
+	set	y,		pop
+	set	x,		pop
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+	
+;---------------------------------------------
+; Title:	SPED_3_rotate
+;
+; will rotate the screen according to the parameters
+; 
+; Params:	A - rotation in °deg
+; returns:  A:	0 - sucessful
+;				0xFFFF - failure
+;---------------------------------------------
+:.rotate	
+	set	push,	b
+	set	push,	c
+	set	push,	x
+	set	push,	y
+	set	y,		pc
+	:.base4
+	sub	y,		.base4
+	set	x,		a
+	set	a, 	2
+	HWI	[y + .IRQ]
+	set	a,		0
+	HWI	[y + .IRQ]
+	set	a,		c
+	set	y,		pop
+	set	x,		pop
+	set	c,		pop
+	set	b,		pop
+	set	pc,		pop
+	
+	
+;---------------------------------------------
+; Title:	SPED_3_set_num_vertexes
+;
+; sets the internal number of vertexes. No clearing of memory or updating the SPED-3
+; can be used to clear the "screen"
+;
+; Params:	A - num_vertexes & 0x007F  No check for good or bad values. just ensures, that  is remains in the devide limits
+; returns:  A -	new number of vertexes
+; Side effects: the next call of draw will output the new number of vertexes
+;---------------------------------------------
+:.set_num_vertexes
+	set	push,	b
+	set	b,		pc
+	:.base5
+	sub	b,		.base5
+	and	a,		0x007F
+	set	[b + .num_vertexes],	a
+	set	b,		pop
+	set	pc,		pop
+	
+	
+;---------------------------------------------
+; Title:	SPED_3_get_max_num_vertexes
+;
+; gets the maximum number of vertexes drawable (if there will be other devices, they might got different numbers)
+;
+; Params:	none
+; returns:  a - maximum number of vertexes
+;---------------------------------------------
+:.get_max_num_vertexes
+	set	a,		0x0080
+	set	pc,		pop
+
+
+;---------------------------------------------
+; Title:	SPED_3_get_num_colors
+;
+; gets the number of drawable colors (if there will be other devices, they might got different numbers)
+;
+; Params:	none
+; returns:  a - number of colors
+;---------------------------------------------
+:.get_num_colors
+	set	a,		4
+	set	pc,		pop
+	
+
+;---------------------------------------------
+; Title:	SPED_3_get_invis_color
+;
+; gets the index of the invisible color (if there will be other devices, they might got different numbers)
+;
+; Params:	none
+; returns:  a - index of invisibile color
+;---------------------------------------------
+:.get_invis_color
+	set	a ,		0
+	set	pc ,	pop
+	
+;---------------------------------------------
+; Title:	SPED_3_get_screen_dimension
+;
+; gets the width (in increments) of the SPED-3 sreen (if there will be other devices, they might got different numbers)
+;
+; Params:	none
+; returns:  a - width in every direction
+;---------------------------------------------
+:.get_screen_dimension
+	set	a,		0x00FF
+	set	pc, 	pop
+	
+;---------------------------------------------
+; Title:	SPED_3_get_num_intensities
+;
+; gets the number intensities the particle thingy supports
+;
+; Params:	none
+; returns:  a - number of intensities
+;---------------------------------------------
+:.get_num_intensities
+	set	a,		0x0002
+	set	pc, 	pop

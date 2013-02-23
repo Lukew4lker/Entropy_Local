@@ -1,0 +1,14 @@
+sub pc, 1
+set a, pc
+add pc, 6
+.dat 0x696e, 0x6974, 0x0000, 0x0000, 0x6269, 0x6e00
+; a - filename string
+; b - dir in which file resides. if B=0xffff, use pwd.
+; c - if c = 0xffff load entire file else put c sector of the file in output location c (memory location is 512 words if c>0)
+add a, 1
+
+set b, 0xffff
+set c, 0xffff
+jsr [0x1B]
+sub pc, 1 
+sub pc, 1 

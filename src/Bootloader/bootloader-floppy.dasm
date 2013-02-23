@@ -1,0 +1,60 @@
+; --------------------------------------------
+; Title:   main
+; Author:  Kelmoir
+; Date:    19.05.2012
+; Version: 
+; --------------------------------------------
+:booloader
+	ADD	PC,	0x0F
+	DAT 0xFA16										; Fat16 - Ha edition 
+	DAT 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000	; Media name
+	DAT 2											; 8 OS sectors reserved
+	DAT	1											; Number of FAT tables
+	DAT 512											; Words per sector
+	DAT 1440										; Number of sectors
+	DAT 0x4223, 0x1234, 0x1234, 0x1200				; serial Number
+; The booloader itself relies on relative jumps. the Assembler can help with that, though, as doing the maths
+; scan the Hardware for the disk controllers. There can be more than just one,
+; in that case we have to look for the correct disk
+	HWN	Z		
+	SET	I,	0
+:.hardware_detect_loop	
+		IFE	Z,	I
+			SUB	PC,	1					; no disk found - endless loop
+		HWQ	I
+		IFE	A,	0x24c5
+			IFE	B,	0x4fd5
+				IFE	X,	0x7e91
+					IFE	Y,	0x1eb3
+						ADD	PC,	 .floppy_found - .base1
+						:.base1
+		ADD	I,	1
+		SUB	PC,	.base2 - .hardware_detect_loop
+		:.base2
+;We found a floppy drive, read out a sector to see, if it's the correct one.
+;We're doing this by reading the boot sector to 0x8000 and check it
+:.floppy_found
+	SET	A,	0x0002
+	SET	B,	0
+	SET	X,	0
+	SET	y,	0x8000
+	HWI	I
+:.wait_for_floppy
+	SET	a,	0
+	HWI	a
+	ife	a,	3
+	sub	pc,	.base3 - .wait_for_floppy
+:.base3
+	IFE	A,	0x0000							; Command executed without errors?
+		IFE	[0x8000],	{ADD	PC,	0x0F}				; correct boot disk inserted?
+			SET	PC,	0x8000 + .copy_os		; one absolute jump - it will be correct, if the correct disk is inserted
+	SUB	PC,	.copy_os - .base1
+; now copy the OS into the right place inside the memory.
+:.copy_os
+	SET	A,	0x0010
+	SET	B,	0
+	SET	C,	[0x8008]
+	;SUB	C,	1
+	SET	X,	0
+	HWI	I
+	SET	PC,	0				; and finally, start it.
